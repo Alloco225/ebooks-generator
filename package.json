@@ -1,0 +1,38 @@
+{
+  "name": "ebooks-generator",
+  "version": "0.1.0",
+  "description": "Generates Selfhelp Ebooks with illustrations with just an idea",
+  "main": "main.js",
+  "scripts": {
+    "test": "npm run test",
+    "build": "tsc",
+    "start": "bun main.ts",
+    "dev": "bun main.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Alloco225/ebooks-generator.git"
+  },
+  "keywords": [
+    "Ebooks",
+    "Generate",
+    "Ebook",
+    "AI",
+    "LLM"
+  ],
+  "author": "Alloco225",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Alloco225/ebooks-generator/issues"
+  },
+  "homepage": "https://github.com/Alloco225/ebooks-generator#readme",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "typescript": "^5.8.2",
+    "ts-node": "^10.9.0"
+  }
+}
