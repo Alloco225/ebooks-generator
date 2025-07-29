@@ -55,12 +55,33 @@ bun run dev
 - `bun run compile` - Create a standalone executable
 - `bun run check` - Type check the code
 
+## Features
+
+### 📊 Status Tracking
+The application automatically tracks the completion status of each ebook project:
+
+- **✅ COMPLETED**: Ebook fully generated with all chapters and images
+- **🔄 IN PROGRESS**: Partially completed (shows `2/5img 3/5chapt` format)
+- **📝 PLAN READY**: Plan generated but no chapters yet
+- **🆕 Not Started**: No files generated
+
+### 🎯 Smart Filtering
+- **Show All**: Display all ideas with their status
+- **Show Incomplete**: Focus on unfinished projects
+- **Show Completed**: View only finished ebooks
+
+### 🔄 Resume Capability
+- Continue generation from where you left off
+- Automatic detection of existing files
+- Skip already generated content
+
 ## Notes
 
 - **Image Generation**: Currently only supported with OpenAI (DALL-E)
 - **Minimum Requirement**: At least one API key must be set
 - **Cost Considerations**: Different providers have different pricing models
 - **Model Selection**: You can choose the specific model when running the application
+- **File Organization**: All outputs are saved in `output/category/idea-title/` directories
 
 ## Provider Recommendations
 
