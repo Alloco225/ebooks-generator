@@ -2,12 +2,14 @@
   "name": "ebooks-generator",
   "version": "0.1.0",
   "description": "Generates Selfhelp Ebooks with illustrations with just an idea",
-  "main": "main.js",
+  "main": "main.ts",
   "scripts": {
-    "test": "npm run test",
-    "build": "tsc",
-    "start": "bun main.ts",
-    "dev": "bun main.ts"
+    "test": "bun test",
+    "build": "bun build main.ts --outdir ./dist",
+    "start": "bun run main.ts",
+    "dev": "bun run main.ts",
+    "check": "bun run --check main.ts",
+    "compile": "bun build main.ts --compile --outfile ebook-generator"
   },
   "repository": {
     "type": "git",

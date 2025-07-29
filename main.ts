@@ -269,13 +269,13 @@ const selectLLMProvider = async (): Promise<LLMConfig> => {
 };
 
 // Main ebook generation function
-const generateEbook = async (title: string, category: string, llmConfig: LLMConfig) => {
+const generateEbook = async (title: string, category: string, llmConfig: LLMConfig, dryRun: boolean = false) => {
 	const slug = slugify(title);
 	const categorySlug = slugify(category);
 	const outputDir = path.join("output", categorySlug, slug);
 
-	// Create output directory
-	if (!(await exists(outputDir))) {
+	// Create output directory (skip in dry run mode)
+	if (!dryRun && !(await exists(outputDir))) {
 		await mkdir(outputDir, { recursive: true });
 	}
 
@@ -286,18 +286,49 @@ const generateEbook = async (title: string, category: string, llmConfig: LLMConf
 		chapters: [],
 	};
 
-	console.log(`\n🚀 Starting generation for: ${title}`);
+	console.log(`\n🚀 Starting ${dryRun ? 'DRY RUN' : 'generation'} for: ${title}`);
+	if (dryRun) {
+		console.log("🔍 DRY RUN MODE: No API calls will be made, no files will be created");
+	}
 
 	// Step 1: Generate plan
 	const planPath = path.join(outputDir, "1-title-chapters-plan.txt");
-	if (await exists(planPath)) {
+	if (await exists(planPath) && !dryRun) {
 		console.log("↩️ Found existing plan, loading...");
 		ebook.plan = await readFile(planPath, "utf-8");
 	} else {
-		console.log("📝 Generating plan...");
-		ebook.plan = await callLLM(generatePlanPrompt(title), llmConfig);
-		await writeFile(planPath, ebook.plan);
-		console.log("✅ Plan generated and saved");
+		if (dryRun) {
+			console.log("📝 [DRY RUN] Would generate plan with prompt:");
+			console.log("─".repeat(60));
+			console.log(generatePlanPrompt(title));
+			console.log("─".repeat(60));
+			// Mock plan for dry run
+			ebook.plan = `### Introduction
+Ce chapitre présente les bases du business
+Illustration : Infographie présentant les concepts clés
+
+### Chapitre 1: Étude de marché
+Analyse du marché et de la concurrence
+Illustration : Graphique de l'analyse de marché
+
+### Chapitre 2: Budget et financement
+Calcul des coûts et sources de financement
+Illustration : Tableau des coûts et revenus
+
+### Chapitre 3: Mise en œuvre
+Les étapes pratiques de lancement
+Illustration : Timeline de mise en œuvre
+
+### Conclusion
+Résumé et prochaines étapes
+Illustration : Checklist de réussite`;
+			console.log("✅ [DRY RUN] Plan preview generated");
+		} else {
+			console.log("📝 Generating plan...");
+			ebook.plan = await callLLM(generatePlanPrompt(title), llmConfig);
+			await writeFile(planPath, ebook.plan);
+			console.log("✅ Plan generated and saved");
+		}
 	}
 
 	// Parse chapters from plan
@@ -308,7 +339,14 @@ const generateEbook = async (title: string, category: string, llmConfig: LLMConf
 
 		// Extract illustration prompt from plan
 		const illustrationMatch = chapterDescription.match(/Illustration : (.+)/);
-		const illustrationPrompt = illustrationMatch ? illustrationMatch[1].trim() : await callLLM(generateIllustrationPrompt(chapterTitle, title), llmConfig);
+		let illustrationPrompt = '';
+		if (illustrationMatch) {
+			illustrationPrompt = illustrationMatch[1].trim();
+		} else if (dryRun) {
+			illustrationPrompt = `[DRY RUN] Would generate illustration prompt for: ${chapterTitle}`;
+		} else {
+			illustrationPrompt = await callLLM(generateIllustrationPrompt(chapterTitle, title), llmConfig);
+		}
 
 		ebook.chapters.push({
 			title: chapterTitle,
@@ -327,7 +365,12 @@ const generateEbook = async (title: string, category: string, llmConfig: LLMConf
 
 		// Generate illustration
 		const illustrationPath = path.join(outputDir, `${chapterPrefix}.png`);
-		if (await exists(illustrationPath)) {
+		if (dryRun) {
+			console.log("🎨 [DRY RUN] Would generate illustration with prompt:");
+			console.log(`   "${chapter.illustrationPrompt}"`);
+			console.log(`   → Output: ${illustrationPath}`);
+			chapter.illustrationPath = illustrationPath;
+		} else if (await exists(illustrationPath)) {
 			console.log("↩️ Found existing illustration, skipping...");
 			chapter.illustrationPath = illustrationPath;
 		} else {
@@ -340,7 +383,26 @@ const generateEbook = async (title: string, category: string, llmConfig: LLMConf
 
 		// Generate chapter content
 		const chapterPath = path.join(outputDir, `${chapterPrefix}.txt`);
-		if (await exists(chapterPath)) {
+		if (dryRun) {
+			console.log("✍️ [DRY RUN] Would generate chapter content with prompt:");
+			console.log("─".repeat(40));
+			console.log(generateChapterPrompt(chapter.title, title));
+			console.log("─".repeat(40));
+			chapter.content = `[DRY RUN] Mock content for chapter: ${chapter.title}
+
+Ce chapitre aurait été généré avec ${llmConfig.provider} (${llmConfig.model}).
+
+Le contenu inclurait:
+- Introduction au sujet
+- Étapes pratiques détaillées  
+- Exemples concrets avec prix
+- Conseils et astuces
+- Erreurs à éviter
+- Résumé des points clés
+
+Longueur estimée: 500-800 mots`;
+			console.log(`   → Output: ${chapterPath}`);
+		} else if (await exists(chapterPath)) {
 			console.log("↩️ Found existing chapter content, loading...");
 			chapter.content = await readFile(chapterPath, "utf-8");
 		} else {
@@ -350,8 +412,8 @@ const generateEbook = async (title: string, category: string, llmConfig: LLMConf
 			console.log("✅ Chapter content generated and saved");
 		}
 
-		// Pause point for verification
-		if (i < ebook.chapters.length - 1) {
+		// Pause point for verification (skip in dry run mode)
+		if (!dryRun && i < ebook.chapters.length - 1) {
 			const answer = await question("Continue to next chapter? (y/n) ");
 			if (answer.toLowerCase() !== "y") {
 				console.log("⏸️ Generation paused. You can resume later.");
@@ -361,32 +423,53 @@ const generateEbook = async (title: string, category: string, llmConfig: LLMConf
 	}
 
 	// Step 3: Compile markdown
-	console.log("\n📚 Compiling markdown...");
-	let markdown = `# ${title}\n\n`;
+	if (dryRun) {
+		console.log("\n📚 [DRY RUN] Would compile markdown...");
+		console.log(`   → Output: ${path.join(outputDir, `${slug}.md`)}`);
+		console.log("\n📋 [DRY RUN] Summary of what would be generated:");
+		console.log(`   📁 Directory: ${outputDir}`);
+		console.log(`   📝 Plan file: 1-title-chapters-plan.txt`);
+		ebook.chapters.forEach((chapter, i) => {
+			const chapterSlug = slugify(chapter.title);
+			console.log(`   📖 Chapter ${i + 1}: ${i + 1}-${chapterSlug}.txt`);
+			console.log(`   🎨 Image ${i + 1}: ${i + 1}-${chapterSlug}.png`);
+		});
+		console.log(`   📚 Final ebook: ${slug}.md`);
+		
+		console.log("\n💰 Estimated API usage:");
+		const totalPrompts = 1 + ebook.chapters.length * 2; // plan + (content + illustration) per chapter
+		console.log(`   📊 Total prompts: ${totalPrompts}`);
+		console.log(`   🤖 Provider: ${AVAILABLE_PROVIDERS[llmConfig.provider].name}`);
+		console.log(`   🧠 Model: ${llmConfig.model}`);
+		console.log(`   🎨 Images: ${ebook.chapters.length} (DALL-E required)`);
+	} else {
+		console.log("\n📚 Compiling markdown...");
+		let markdown = `# ${title}\n\n`;
 
-	// Add introduction
-	markdown += `## Introduction\n\n`;
-	markdown += `Ce guide vous montrera comment ${title.toLowerCase()}.\n\n`;
+		// Add introduction
+		markdown += `## Introduction\n\n`;
+		markdown += `Ce guide vous montrera comment ${title.toLowerCase()}.\n\n`;
 
-	// Add chapters
-	for (let i = 0; i < ebook.chapters.length; i++) {
-		const chapter = ebook.chapters[i];
-		const chapterSlug = slugify(chapter.title);
-		const imagePath = `${i + 1}-${chapterSlug}.png`;
+		// Add chapters
+		for (let i = 0; i < ebook.chapters.length; i++) {
+			const chapter = ebook.chapters[i];
+			const chapterSlug = slugify(chapter.title);
+			const imagePath = `${i + 1}-${chapterSlug}.png`;
 
-		markdown += `## Chapitre ${i + 1}: ${chapter.title}\n\n`;
-		markdown += `![Illustration pour ${chapter.title}](${imagePath})\n\n`;
-		markdown += `${chapter.content}\n\n`;
+			markdown += `## Chapitre ${i + 1}: ${chapter.title}\n\n`;
+			markdown += `![Illustration pour ${chapter.title}](${imagePath})\n\n`;
+			markdown += `${chapter.content}\n\n`;
+		}
+
+		// Add conclusion
+		markdown += `## Conclusion\n\n`;
+		markdown += `Vous avez maintenant toutes les clés pour ${title.toLowerCase()}.\n\n`;
+
+		// Save markdown
+		const markdownPath = path.join(outputDir, `${slug}.md`);
+		await writeFile(markdownPath, markdown);
+		console.log(`✅ Markdown compiled and saved to ${markdownPath}`);
 	}
-
-	// Add conclusion
-	markdown += `## Conclusion\n\n`;
-	markdown += `Vous avez maintenant toutes les clés pour ${title.toLowerCase()}.\n\n`;
-
-	// Save markdown
-	const markdownPath = path.join(outputDir, `${slug}.md`);
-	await writeFile(markdownPath, markdown);
-	console.log(`✅ Markdown compiled and saved to ${markdownPath}`);
 
 	return ebook;
 };
@@ -413,8 +496,8 @@ const main = async () => {
 
 	// List ideas in category
 	console.log(`\n💡 Ideas in ${selectedCategory}:`);
-	const ideas = BUSINESS_IDEAS[selectedCategory];
-	ideas.forEach((idea, i) => {
+	const ideas = BUSINESS_IDEAS[selectedCategory as keyof typeof BUSINESS_IDEAS];
+	ideas.forEach((idea: string, i: number) => {
 		console.log(`${i + 1}. ${idea}`);
 	});
 
@@ -444,10 +527,30 @@ const main = async () => {
 		return;
 	}
 
+	// Ask for dry run mode
+	console.log('\n🔍 Generation Mode:');
+	console.log('1. Normal generation (uses API credits)');
+	console.log('2. Dry run (preview only, no API calls)');
+	
+	const modeChoice = await question('\nSelect mode (number): ');
+	const isDryRun = modeChoice === '2';
+	
+	if (isDryRun) {
+		console.log('\n🔍 DRY RUN MODE SELECTED');
+		console.log('   • No API calls will be made');
+		console.log('   • No files will be created');
+		console.log('   • Preview prompts and structure only');
+	}
+
 	// Start generation
 	try {
-		await generateEbook(selectedTitle, selectedCategory, llmConfig);
-		console.log("\n🎉 Ebook generation completed successfully!");
+		await generateEbook(selectedTitle, selectedCategory, llmConfig, isDryRun);
+		if (isDryRun) {
+			console.log("\n🔍 Dry run completed! Review the preview above.");
+			console.log("💡 To generate the actual ebook, run again and select normal mode.");
+		} else {
+			console.log("\n🎉 Ebook generation completed successfully!");
+		}
 	} catch (error) {
 		console.error("\n❌ Error during ebook generation:", error);
 	} finally {
